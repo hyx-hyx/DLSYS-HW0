@@ -4,10 +4,27 @@ import numdifftools as nd
 sys.path.append("./src")
 import mugrade
 from simple_ml import *
+import os
+
+# 调试：打印当前路径
+print(f"Current directory: {os.getcwd()}")
+print(f"Python path: {sys.path}")
+
+# 尝试导入 C++ 扩展
 try:
     from simple_ml_ext import *
-except:
-    pass
+    print("Successfully imported simple_ml_ext module")
+    # 查看模块中有什么函数
+    import simple_ml_ext
+    print(f"Functions in simple_ml_ext: {dir(simple_ml_ext)}")
+except Exception as e:
+    print(f"Failed to import simple_ml_ext: {e}")
+    print(f"Module path: {sys.path}")
+    # 尝试在多个位置查找模块
+    for root, dirs, files in os.walk('.'):
+        for file in files:
+            if file.endswith('.pyd'):
+                print(f"Found .pyd file: {os.path.join(root, file)}")
 
 
 ##############################################################################

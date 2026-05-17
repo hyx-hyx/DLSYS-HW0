@@ -6,18 +6,41 @@
 namespace py = pybind11;
 
 /* X shape=(m,n) theta shape=(n,k)*/
-void mat_mul(float* result,const float *X,float *theta,size_t m,size_t n,size_t k){
-    for(size_t i=0;i<m;++i){
-        for(size_t k_idx=0;k_idx<k;++k_idx){
+void mat_mul(py::array_t<double> X, py::array_t<double> theta){
+    auto buf_x = X.unchecked<2>();
+    auto buf_theta = theta.unchecked<2>();
+    
+    int x_rows = buf_x.shape(0);
+    int x_cols = buf_x.shape(1);
+    int theta_rows = buf_theta.shape(0);
+    int theta_cols = buf_theta.shape(1);
+    if(x_cols!=theta_rows){
+        throw std::runtime_error("Input a column not equal Input b row!");
+    }
+
+    auto result = py::array_t<float>({rows, cols});
+    auto buf_result = result.mutable_unchecked<2>();
+
+    for(size_t i=0;i<x_rows;++i){
+        for(size_t k=0;k<theta_cols;++k){
             float sum=0;
-            for(size_t j=0;j<n;++j){
-                sum+=X[i*n+j]*theta[j*k+k_idx];
+            for(size_t j=0;j<x_cols;++j){
+                sum+=X.at[i*x_cols+j]*theta[j*theta_cols+k];
             }
-            result[i*k+k_idx]=sum;
+            result[i*x_cols+k]=sum;
+        }
+    }
+    return result
+}
+void mat_transpose(float* x){
+    for(size_t i=0;i<m;++i){
+        for(size_t j=0;j<i;++j){
+            float t=x[i*n+j];
+            x[i*n+j]=x[j*n+i];
+            x[j*n+i]=t;
         }
     }
 }
-
 
 void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
 								  float *theta, size_t m, size_t n, size_t k,
@@ -46,10 +69,8 @@ void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
      */
 
     /// BEGIN YOUR CODE
-    float X_batch[batch*n];
-    float y_batch[batch];
-    float x_theta[m*k];
-
+    auto x_batch = py::array_t<float>({batch, n});
+    float y_batch = py::array_t<float>({m});
     for(size_t i=0;i<m;i+=batch){
         size_t end=i+batch<m?i+batch:m;
         size_t b=end-i;
@@ -57,30 +78,10 @@ void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
             X_batch[idx-i]=X[idx];
         for(size_t idx=i;idx<i+b;++idx)
             y_batch[idx-i]=y[idx];
-        mat_mul(x_theta,X_batch,y_batch,m,n,k);
-
-        // exp(theta_t_x) and normalize
-        float exp_sum=0;
-        for(size_t i=0;i<m*k;++i){
-            x_theta[i]=exp(x_theta[i]);
-            if(i%k==0 && i>0){
-                for(size_t j=i-k;j<i;++j){
-                    x_theta[i]/=exp_sum;
-                }
-                exp_sum+=0;
-            }
-            exp_sum+=x_theta[i];
-        }
-        // Z-Iy
-        for(size_t i=0;i<m;++i){
-            x_theta[i*k+y[i]]-=1;
-        }
-        float loss[n*k];
-        mat_mul(loss,X,x_theta,n,m,k);
         
-        for(size_t i=0;i<n*k;++i){
-            loss[i]/=b;
-        }
+        mat_mul(theta_t_x,X_batch,y_batch,m,n,k);
+
+        // exp(theta_t_x)
     }
 
     /// END YOUR CODE

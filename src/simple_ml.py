@@ -1,6 +1,5 @@
-import struct
 import numpy as np
-import gzip
+
 try:
     from simple_ml_ext import *
 except:
@@ -20,8 +19,16 @@ def add(x, y):
         Sum of x + y
     """
     ### BEGIN YOUR CODE
-    pass
+    return x + y
+
     ### END YOUR CODE
+
+    def test_add():
+        assert add(5, 6) == 11
+        assert add(3.2, 1.0) == 4.2
+        assert type(add(4., 4)) == float
+        np.testing.assert_allclose(add(np.array([1, 2]), np.array([3, 4])),
+                                   np.array([4, 6]))
 
 
 def parse_mnist(image_filename, label_filename):
@@ -48,7 +55,32 @@ def parse_mnist(image_filename, label_filename):
                 for MNIST will contain the values 0-9.
     """
     ### BEGIN YOUR CODE
-    pass
+    import gzip, struct
+    with gzip.open(image_filename, "rb") as f:
+        magic, num_images, rows, cols = struct.unpack(">iiii", f.read(16))
+        if magic != 2051:
+            raise ValueError(f'无效的图像文件魔数: {magic}')
+
+        # 一次性读取所有像素数据
+        buffer = f.read()
+
+        # 将字节数据转换为numpy数组
+        images = np.frombuffer(buffer, dtype=np.uint8)
+        images = images.reshape(num_images, rows * cols)
+        images = images.astype(np.float32) / 255.0
+
+    with gzip.open(label_filename, "rb") as f:
+        magic, num_labels = struct.unpack(">ii", f.read(8))
+        if magic != 2049:
+            raise ValueError(f'无效的图像文件魔数: {magic}')
+
+        # 一次性读取所有像素数据
+        buffer = f.read()
+
+        # 将字节数据转换为numpy数组
+        labels = np.frombuffer(buffer, dtype=np.uint8)
+        labels = labels.reshape(num_labels)
+    return images, labels
     ### END YOUR CODE
 
 
@@ -68,11 +100,11 @@ def softmax_loss(Z, y):
         Average softmax loss over the sample.
     """
     ### BEGIN YOUR CODE
-    pass
+    return np.sum(np.log(np.sum(np.exp(Z), axis=1)) - Z[range(Z.shape[0]), y]) / y.shape[0]
     ### END YOUR CODE
 
 
-def softmax_regression_epoch(X, y, theta, lr = 0.1, batch=100):
+def softmax_regression_epoch(X, y, theta, lr=0.1, batch=100):
     """ Run a single epoch of SGD for softmax regression on the data, using
     the step size lr and specified batch size.  This function should modify the
     theta matrix in place, and you should iterate through batches in X _without_
@@ -91,11 +123,26 @@ def softmax_regression_epoch(X, y, theta, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
+    num_examples, input_dim = X.shape
+    num_class = theta.shape[1]
+    for i in range(0, num_examples, batch):
+        end = min(i + batch, num_examples)
+        X_batch = X[i:end, :]
+        y_batch = y[i:end]
+        m = end - i
+
+        logits = np.dot(X_batch, theta)
+        max_logits = np.max(logits, axis=1, keepdims=True)
+        exp_logits = np.exp(logits - max_logits)
+        Z = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+        iy = np.zeros_like(Z)
+        iy[range(m), y_batch] = 1
+        grad = np.dot(np.transpose(X_batch), Z - iy) / batch
+        theta -= grad * lr
     ### END YOUR CODE
 
 
-def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
+def nn_epoch(X, y, W1, W2, lr=0.1, batch=100):
     """ Run a single epoch of SGD for a two-layer neural network defined by the
     weights W1 and W2 (with no bias terms):
         logits = ReLU(X * W1) * W2
@@ -118,22 +165,53 @@ def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    num_examples, input_dim = X.shape
+    num_classes = W2.shape[1]
+    # 分批次
+    for i in range(0, num_examples, batch):
+        end = min(i + batch, num_examples)
+        X_batch = X[i:end, :]
+        y_batch = y[i:end,]
+        m = end - i
 
+        # Z1=ReLU(XW1)
+        XW1 = np.dot(X_batch, W1)
+        Z1 = np.where(XW1 <= 0, 0, XW1)
+
+        # logits = ReLU(X * W1) * W2
+        logits = np.dot(Z1, W2)
+
+        # Iy
+        Iy = np.zeros((m, num_classes))
+        Iy[range(m), y_batch] = 1
+
+        # G2=normalize(exp(Z1W2))−Iy
+        g2 = np.exp(logits) / np.sum(np.exp(logits), axis=1, keepdims=True)
+        g2 -= Iy
+
+        # G1=1{Z1>0}∘(G2WT2)
+        g1 = np.where(Z1 > 0, 1, 0) * (g2 @ W2.T)
+
+        # 更新W1
+        gradw1 = X_batch.T @ g1 / m
+        W1 -= lr * gradw1
+
+        # 更新W2
+        softmax_regression_epoch(Z1, y_batch, W2, lr, batch)
+    ### END YOUR CODE
 
 
 ### CODE BELOW IS FOR ILLUSTRATION, YOU DO NOT NEED TO EDIT
 
-def loss_err(h,y):
+def loss_err(h, y):
     """ Helper funciton to compute both loss and error"""
-    return softmax_loss(h,y), np.mean(h.argmax(axis=1) != y)
+    return softmax_loss(h, y), np.mean(h.argmax(axis=1) != y)
 
 
 def train_softmax(X_tr, y_tr, X_te, y_te, epochs=10, lr=0.5, batch=100,
                   cpp=False):
     """ Example function to fully train a softmax regression classifier """
-    theta = np.zeros((X_tr.shape[1], y_tr.max()+1), dtype=np.float32)
+    theta = np.zeros((X_tr.shape[1], y_tr.max() + 1), dtype=np.float32)
     print("| Epoch | Train Loss | Train Err | Test Loss | Test Err |")
     for epoch in range(epochs):
         if not cpp:
@@ -142,11 +220,11 @@ def train_softmax(X_tr, y_tr, X_te, y_te, epochs=10, lr=0.5, batch=100,
             softmax_regression_epoch_cpp(X_tr, y_tr, theta, lr=lr, batch=batch)
         train_loss, train_err = loss_err(X_tr @ theta, y_tr)
         test_loss, test_err = loss_err(X_te @ theta, y_te)
-        print("|  {:>4} |    {:.5f} |   {:.5f} |   {:.5f} |  {:.5f} |"\
+        print("|  {:>4} |    {:.5f} |   {:.5f} |   {:.5f} |  {:.5f} |" \
               .format(epoch, train_loss, train_err, test_loss, test_err))
 
 
-def train_nn(X_tr, y_tr, X_te, y_te, hidden_dim = 500,
+def train_nn(X_tr, y_tr, X_te, y_te, hidden_dim=500,
              epochs=10, lr=0.5, batch=100):
     """ Example function to train two layer neural network """
     n, k = X_tr.shape[1], y_tr.max() + 1
@@ -157,21 +235,21 @@ def train_nn(X_tr, y_tr, X_te, y_te, hidden_dim = 500,
     print("| Epoch | Train Loss | Train Err | Test Loss | Test Err |")
     for epoch in range(epochs):
         nn_epoch(X_tr, y_tr, W1, W2, lr=lr, batch=batch)
-        train_loss, train_err = loss_err(np.maximum(X_tr@W1,0)@W2, y_tr)
-        test_loss, test_err = loss_err(np.maximum(X_te@W1,0)@W2, y_te)
-        print("|  {:>4} |    {:.5f} |   {:.5f} |   {:.5f} |  {:.5f} |"\
+        train_loss, train_err = loss_err(np.maximum(X_tr @ W1, 0) @ W2, y_tr)
+        test_loss, test_err = loss_err(np.maximum(X_te @ W1, 0) @ W2, y_te)
+        print("|  {:>4} |    {:.5f} |   {:.5f} |   {:.5f} |  {:.5f} |" \
               .format(epoch, train_loss, train_err, test_loss, test_err))
 
 
-
 if __name__ == "__main__":
-    X_tr, y_tr = parse_mnist("data/train-images-idx3-ubyte.gz",
-                             "data/train-labels-idx1-ubyte.gz")
-    X_te, y_te = parse_mnist("data/t10k-images-idx3-ubyte.gz",
-                             "data/t10k-labels-idx1-ubyte.gz")
+    X_tr, y_tr = parse_mnist("../data/train-images-idx3-ubyte.gz",
+                             "../data/train-labels-idx1-ubyte.gz")
+    X_te, y_te = parse_mnist("../data/t10k-images-idx3-ubyte.gz",
+                             "../data/t10k-labels-idx1-ubyte.gz")
 
     print("Training softmax regression")
-    train_softmax(X_tr, y_tr, X_te, y_te, epochs=10, lr = 0.1)
+    train_softmax(X_tr, y_tr, X_te, y_te, epochs=10, lr=0.1)
 
     print("\nTraining two layer neural network w/ 100 hidden units")
-    train_nn(X_tr, y_tr, X_te, y_te, hidden_dim=100, epochs=20, lr = 0.2)
+    train_nn(X_tr, y_tr, X_te, y_te, hidden_dim=100, epochs=20, lr=0.2)
+
