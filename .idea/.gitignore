@@ -11,5 +11,5 @@
 
 *.iml
 *.xml
-.vscode/**
+../.vscode/**
 *.pyc
