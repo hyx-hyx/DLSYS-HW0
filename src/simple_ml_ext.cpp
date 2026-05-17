@@ -53,8 +53,9 @@ void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
     for(size_t i=0;i<m;i+=batch){
         size_t end=i+batch<m?i+batch:m;
         size_t b=end-i;
-        for(size_t idx=i;idx<i+b;++idx)
-            X_batch[idx-i]=X[idx];
+        size_t x_step_size=n;
+        for(size_t idx=i*x_step_size;idx<(i+b)*x_step_size;++idx)
+            X_batch[idx-(i*x_step_size)]=X[idx];
         for(size_t idx=i;idx<i+b;++idx)
             y_batch[idx-i]=y[idx];
         mat_mul(x_theta,X_batch,y_batch,m,n,k);
@@ -65,21 +66,27 @@ void softmax_regression_epoch_cpp(const float *X, const unsigned char *y,
             x_theta[i]=exp(x_theta[i]);
             if(i%k==0 && i>0){
                 for(size_t j=i-k;j<i;++j){
-                    x_theta[i]/=exp_sum;
+                    x_theta[j]/=exp_sum;
                 }
-                exp_sum+=0;
+                exp_sum=0;
             }
             exp_sum+=x_theta[i];
         }
+        for(size_t j=(m-1)*k;j<m*k;++j){
+            x_theta[j]/=exp_sum;
+        }
+
         // Z-Iy
         for(size_t i=0;i<m;++i){
             x_theta[i*k+y[i]]-=1;
         }
-        float loss[n*k];
-        mat_mul(loss,X,x_theta,n,m,k);
+        float grad[n*k];
+        mat_mul(grad,X,x_theta,n,m,k);
         
         for(size_t i=0;i<n*k;++i){
-            loss[i]/=b;
+            std::cout<<grad[i]<<" ";
+            grad[i]/=b;
+            theta[i]-=lr*grad[i];
         }
     }
 
