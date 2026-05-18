@@ -20,7 +20,7 @@ void mat_mul(float* result, const float* X, float* theta, size_t m, size_t n,
   }
 }
 
-void transponse(float* result, const float* X, size_t m, size_t n) {
+void transpose(float* result, const float* X, size_t m, size_t n) {
   for (size_t i = 0; i < m; ++i) {
     for (size_t j = 0; j < n; ++j) {
       result[j * m + i] = X[i * n + j];
@@ -88,7 +88,7 @@ void softmax_regression_epoch_cpp(const float* X, const unsigned char* y,
     }
     float grad[n * k];
     float X_batch_transpose[n * b];
-    transponse(X_batch_transpose, X_batch, b, n);
+    transpose(X_batch_transpose, X_batch, b, n);
     mat_mul(grad, X_batch_transpose, x_theta, n, b, k);
 
     for (size_t i = 0; i < n * k; ++i) {
