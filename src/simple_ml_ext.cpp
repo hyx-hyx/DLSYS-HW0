@@ -66,10 +66,6 @@ void softmax_regression_epoch_cpp(const float* X, const unsigned char* y,
     for (size_t idx = i; idx < i + b; ++idx) y_batch[idx - i] = y[idx];
     mat_mul(x_theta, X_batch, theta, b, n, k);
 
-    for (size_t i = 0; i < b * k; ++i) {
-      std::cout << "x_theta " << i << " " << x_theta[i] << std::endl;
-    }
-
     // exp(theta_t_x) and normalize
     float exp_sum = 0;
     for (size_t i = 0; i < b * k; ++i) {
@@ -96,7 +92,6 @@ void softmax_regression_epoch_cpp(const float* X, const unsigned char* y,
     mat_mul(grad, X_batch_transpose, x_theta, n, b, k);
 
     for (size_t i = 0; i < n * k; ++i) {
-      std::cout << grad[i] << " ";
       grad[i] /= b;
       theta[i] -= lr * grad[i];
     }
